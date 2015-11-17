@@ -1,0 +1,11 @@
+{
+    "name": "gitTalk",
+    "type": "library",
+    "minimum-stability": "dev",
+    "autoload": {
+        "psr-0": { "": "" }
+    },
+    "require": {
+        "league/plates": "3.*"
+    }
+}
