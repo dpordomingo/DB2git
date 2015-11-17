@@ -6,15 +6,20 @@ use Services\CVS\Entities\Interfaces\Versionable;
 
 use \Exception as Exception;
 use Entities\TemplateRepository;
+use Services\Shell;
 
 class CVS
 {
 	private $_repositoryPath;
+	private $_origin;
+	private $_branch;
 	private $_templateRepo;
 
-	public function __construct ($repositoryPath, TemplateRepository $templateRepo)
+	public function __construct ($configArray, TemplateRepository $templateRepo)
 	{
-		$this->_repositoryPath = $repositoryPath;
+		$this->_repositoryPath = $configArray['repositoryPath'];
+		$this->_origin = $configArray['originName'];
+		$this->_branch = $configArray['branchName'];
 		$this->_templateRepo = $templateRepo;
 	}
 
@@ -27,9 +32,18 @@ class CVS
 		}
 
 		$this->_writeFile($entity);
-		$this->_doCommit($entity);
 
-		//$this->_doPush($entity);
+		try{
+			$this->_doCommit($entity);
+			try{
+				$this->_doPush();
+			} catch (Exception $ex) {
+				//throw $ex;
+			}
+		} catch (Exception $ex) {
+			throw $ex;
+		}
+
 		$entity->generateNewCheckCode();
 	}
 
@@ -53,14 +67,45 @@ class CVS
 	{
 		$fileName = $this->_getFileName($entity);
 		$commitMessage = sprintf('[CMS] %s', $entity->getName());
-		$commandString = 'cd ' . $this->_repositoryPath . ' &&
-			git reset . &&
-			git add ' . $fileName . ' &&
-			git commit -m "' . $commitMessage . '"';
-		exec($commandString, $output, $returnCode);
-		if ($returnCode !== 0) {
-			throw new Exception('Commit failed.' . PHP_EOL . $commandString . PHP_EOL . var_export($output, true));
+
+		$shell = new Shell();
+		$shell
+			->put(sprintf('cd %s', $this->_repositoryPath))
+			->put(sprintf('git reset .'))
+			->put(sprintf('git add %s', $fileName))
+			->put(sprintf('git commit -m "%s"', $commitMessage))
+			->exec();
+	}
+
+	private function _doPush()
+	{
+		$shell = new Shell();
+		$shell->put(sprintf('cd %s', $this->_repositoryPath));
+
+		if (!$this->_hasDivergedFromOrigin()) {
+			$shell->put(sprintf('git push %s %s', $this->_origin, $this->_branch));
+		} else {
+			$unsyncedBranchName = 'unsync';
+			$shell
+				->put(sprintf('git checkout -B %s %s/%s', $unsyncedBranchName, $this->_origin, $this->_branch))
+				->put(sprintf('git push %s %s --force', $this->_origin, $unsyncedBranchName))
+				->put(sprintf('git checkout %s', $this->_branch))
+				->put(sprintf('git push %s %s --force', $this->_origin, $this->_branch));
 		}
+		$shell->exec();
+	}
+
+	private function _hasDivergedFromOrigin ()
+	{
+		$shell = new Shell();
+		$res = $shell
+			->put(sprintf('cd %s', $this->_repositoryPath))
+			->put(sprintf('git fetch %s -v', $this->_origin))
+			->put(sprintf('git rev-list --left-right --count %s/%s...%s', $this->_origin, $this->_branch, $this->_branch))
+			->exec();
+
+		$localRepoRev = array_pop($res[1]);
+		return (Boolean)preg_match('~[1-9]+[0-9]*\s+[1-9]+[0-9]*~', $localRepoRev);
 	}
 
 }

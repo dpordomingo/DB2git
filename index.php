@@ -14,7 +14,13 @@ $APP['DB'] = new DBConnector('10.0.0.5', 'root', 'root', 'git');
 $APP['TPLEngine'] = new TPLEngine(__DIR__ . '/resources/views');
 $APP['EntityManager'] = new EntityManager($APP['DB']);
 $APP['TemplateRepo'] = new TemplateRepository($APP['EntityManager']);
-$APP['CVS'] = new CVS(__DIR__ . '/resources/DB2git-templates', $APP['TemplateRepo']);
+$APP['CVS'] = new CVS([
+		'repositoryPath' => __DIR__ . '/resources/DB2git-templates',
+		'originName' => 'origin',
+		'branchName' => 'master'
+	],
+	$APP['TemplateRepo']
+);
 
 $APP['EntityManager']->onPrePersist(
 	function ($entity) use ($APP) {
