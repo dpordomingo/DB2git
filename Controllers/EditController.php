@@ -14,6 +14,7 @@ class EditController extends AbstractController
 
 		if (isset($_POST['code'])) {
 			$template->code = $_POST['code'];
+			$template->checkCode = $_POST['checkCode'];
 			try {
 				$this->container['EntityManager']->save($template);
 			} catch (Exception $e) {
