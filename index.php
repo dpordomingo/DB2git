@@ -19,7 +19,8 @@ $APP['CVS'] = new CVS([
 		'originName' => 'origin',
 		'branchName' => 'master'
 	],
-	$APP['TemplateRepo']
+	$APP['TemplateRepo'],
+	$APP['EntityManager']
 );
 
 $APP['EntityManager']->onPrePersist(

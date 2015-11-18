@@ -16,7 +16,6 @@ class DBConnector
 	public function fetch($mySQLQueryString)
 	{
 		$res = $this->execute($mySQLQueryString);
-		$result = [];
 
 		return $res->fetch_all(MYSQLI_ASSOC);
 	}

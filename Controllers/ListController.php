@@ -8,7 +8,15 @@ class ListController extends AbstractController
 	{
 		$templates = $this->container['TemplateRepo']->getAll();
 
-		return $this->container['TPLEngine']->render('templateList', ['templates' => $templates]);
+		$CVS = $this->container['CVS'];
+		$isUpdatable = $CVS->canBeUpdatedFromOrigin();
+		$isUnsynced = $CVS->hasDivergedFromOrigin();
+
+		return $this->container['TPLEngine']->render('templateList', [
+			'templates' => $templates,
+			'isUpdatable' => $isUpdatable,
+			'isUnsynced' => $isUnsynced
+		]);
 	}
 }
 

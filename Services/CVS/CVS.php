@@ -7,6 +7,7 @@ use Services\CVS\Entities\Interfaces\Versionable;
 use \Exception as Exception;
 use Entities\TemplateRepository;
 use Services\Shell;
+use DB\EntityManager;
 
 class CVS
 {
@@ -14,13 +15,15 @@ class CVS
 	private $_origin;
 	private $_branch;
 	private $_templateRepo;
+	private $_entityManager;
 
-	public function __construct ($configArray, TemplateRepository $templateRepo)
+	public function __construct ($configArray, TemplateRepository $templateRepo, EntityManager $em)
 	{
 		$this->_repositoryPath = $configArray['repositoryPath'];
 		$this->_origin = $configArray['originName'];
 		$this->_branch = $configArray['branchName'];
 		$this->_templateRepo = $templateRepo;
+		$this->_entityManager = $em;
 	}
 
 	public function commit (Versionable $entity)
@@ -47,6 +50,38 @@ class CVS
 		$entity->generateNewCheckCode();
 	}
 
+	public function updateLocalRepository ()
+	{
+		if (!$this->canBeUpdatedFromOrigin()) {
+			throw new Exception('Local repository can not be updated.');
+		}
+
+		try{
+			$this->_doPull();
+			try{
+				return $this->_importFiles();
+			} catch (Exception $ex) {
+				//throw $ex;
+			}
+		} catch (Exception $ex) {
+			throw $ex;
+		}
+
+		return [];
+	}
+
+	public function hasDivergedFromOrigin ()
+	{
+		$localRepoRev = $this->_getRevisionFromOrigin();
+		return (Boolean)preg_match('~[1-9]+[0-9]*\s+[1-9]+[0-9]*~', $localRepoRev);
+	}
+
+	public function canBeUpdatedFromOrigin ()
+	{
+		$localRepoRev = $this->_getRevisionFromOrigin();
+		return (Boolean)preg_match('~[1-9]+[0-9]*\s+0~', $localRepoRev);
+	}
+
 	private function _isLastVersion(Versionable $entity)
 	{
 		$savedEntity = $this->_templateRepo->byId($entity->getId());
@@ -61,6 +96,26 @@ class CVS
 	private function _writeFile(Versionable $entity)
 	{
 		file_put_contents($this->_getFileName($entity), $entity->getCode());
+	}
+
+	private function _importFiles()
+	{
+		$pattern = sprintf('%s/*.txt', $this->_repositoryPath);
+		$filesNames = glob($pattern);
+
+		$updatedTemplatesNames = [];
+		foreach ($filesNames as $fileName) {
+		    preg_match('~/([^/\.]+)\.txt~', $fileName, $templateNameParts);
+		    $templateName = $templateNameParts[1];
+		    $template = $this->_templateRepo->byName($templateName);
+		    $templateImportedCode = file_get_contents($fileName);
+		    if ($template->code !== $templateImportedCode) {
+			    $template->code = $templateImportedCode;
+			    $this->_entityManager->save($template, false);
+			    $updatedTemplatesNames[] = $templateName;
+		    } 
+		}
+		return $updatedTemplatesNames;
 	}
 
 	private function _doCommit(Versionable $entity)
@@ -82,10 +137,10 @@ class CVS
 		$shell = new Shell();
 		$shell->put(sprintf('cd %s', $this->_repositoryPath));
 
-		if (!$this->_hasDivergedFromOrigin()) {
+		if (!$this->hasDivergedFromOrigin()) {
 			$shell->put(sprintf('git push %s %s', $this->_origin, $this->_branch));
 		} else {
-			$unsyncedBranchName = 'unsync';
+			$unsyncedBranchName = sprintf('unsynced_%d', time());
 			$shell
 				->put(sprintf('git checkout -B %s %s/%s', $unsyncedBranchName, $this->_origin, $this->_branch))
 				->put(sprintf('git push %s %s --force', $this->_origin, $unsyncedBranchName))
@@ -95,7 +150,16 @@ class CVS
 		$shell->exec();
 	}
 
-	private function _hasDivergedFromOrigin ()
+	private function _doPull()
+	{
+		$shell = new Shell();
+		$shell
+			->put(sprintf('cd %s', $this->_repositoryPath))
+			->put(sprintf('git pull --ff-only %s %s', $this->_origin, $this->_branch))
+			->exec();
+	}
+
+	private function _getRevisionFromOrigin () 
 	{
 		$shell = new Shell();
 		$res = $shell
@@ -104,8 +168,7 @@ class CVS
 			->put(sprintf('git rev-list --left-right --count %s/%s...%s', $this->_origin, $this->_branch, $this->_branch))
 			->exec();
 
-		$localRepoRev = array_pop($res[1]);
-		return (Boolean)preg_match('~[1-9]+[0-9]*\s+[1-9]+[0-9]*~', $localRepoRev);
+		return array_pop($res[1]);
 	}
 
 }

@@ -36,4 +36,15 @@ class TemplateRepository
 			return null;
 		}
 	}
+
+	public function byName ($name)
+	{
+		$queryString = sprintf('SELECT * FROM Templates WHERE name = "%s"', $name);
+		$templatesArr = $this->entityManager->fetch($queryString);
+		if (count($templatesArr)) {
+			return new Template($templatesArr[0]);
+		} else {
+			return null;
+		}
+	}
 }

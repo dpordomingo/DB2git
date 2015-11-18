@@ -20,9 +20,9 @@ class EntityManager
 		return $this->dbConnector->fetch($mysqlQueryString);
 	}
 
-	public function save (AbstractDBBaseEntity $entity)
+	public function save (AbstractDBBaseEntity $entity, $trigerListeners = true)
 	{
-		$this->_prePersist($entity);
+		if ($trigerListeners) $this->_prePersist($entity);
 		$this->_save($entity);
 	}
 
